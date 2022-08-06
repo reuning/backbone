@@ -128,26 +128,35 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
 
 
   ### Create Positive and Negative Matrices to hold backbone ###
-  Pupper <- matrix(0, nrow(P), ncol(P))
-  Plower <- matrix(0, nrow(P), ncol(P))
+  # Pupper <- matrix(0, nrow(P), ncol(P))
+  # Plower <- matrix(0, nrow(P), ncol(P))
+  # Pout <- rep(0, nrow(P)*ncol(P)*2)
+  P_n <- nrow(P)*ncol(P)
+  P_flat <- as.vector(P)
 
-
-  for (i in 1:trials){
-
+  p <- progressr::progressor(steps = trials)
+  Pout <- future.apply::future_replicate(trials, {
     #Use probabilities to create an SDSM Bstar
-    A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1, FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
+    A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
+                    FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
     Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
 
     #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
-    Pstar <- tcrossprod(Bstar)
-    Pupper <- Pupper + (Pstar > P)+0
-    Plower <- Plower + (Pstar < P)+0
+    Pstar <- as.vector(tcrossprod(Bstar))
+    Pout <- c(Pstar > P_flat, Pstar < P_flat)
 
     #Increment progress bar
-    utils::setTxtProgressBar(pb, i)
+    # utils::setTxtProgressBar(pb, i)
+    p()
+    return(Pout)
+  }, future.seed = T,
+  )
+  #end for loop
 
-  } #end for loop
   close(pb) #End progress bar
+  Pout <- rowSums(Pout)
+  Pupper <- matrix(Pout[1:P_n], nrow(P), ncol(P))
+  Plower <- matrix(Pout[(P_n+1):(2*P_n)], nrow(P), ncol(P))
 
   #### Create Backbone Object ####
   Pupper <- (Pupper/trials)
