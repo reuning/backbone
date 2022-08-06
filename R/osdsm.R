@@ -94,9 +94,6 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
     trials <- ceiling((stats::power.prop.test(p1 = trials.alpha * 0.95, p2 = trials.alpha, sig.level = alpha, power = (1-alpha), alternative = "one.sided")$n)/2)
   }
 
-  ### Create Positive and Negative Matrices to hold backbone ###
-  Pupper <- matrix(0, nrow(P), ncol(P))
-  Plower <- matrix(0, nrow(P), ncol(P))
 
   #### Compute probabilities for SDSM ####
   #Vectorize the bipartite data
@@ -107,8 +104,10 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   #Compute conditional probabilities using logistic regression (see Neal, 2017)
   for (value in 1:max(weights)) {  #For each edge weight > 0
     dat <- data.frame(y = (A$value>=value)*1, x1 = stats::ave(A$value>=value,A$rowid,FUN=sum), x2 = stats::ave(A$value>=value,A$colid, FUN=sum))
-    fitted <- stats::glm(y ~ x1 + x2, data = dat[which(A$value>=(value-1)),], family = "binomial")
-    A <- cbind(A, stats::predict(fitted, newdata = dat, type = "response"))
+    X <- model.matrix( ~ x1 + x2, data = dat)
+    Y <- dat[which(A$value>=(value-1)), "y"]
+    fitted <- fastglm::fastglm(X[which(A$value>=(value-1)), ], Y, family = binomial)
+    A <- cbind(A, predict(fitted, newdata = X, type = "response"))
   }
 
   #Transform into unconditional probabilities (see Neal, 2017)
@@ -126,6 +125,13 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   #### Build null models ####
   message(paste0("Constructing empirical edgewise p-values using ", trials, " trials -" ))
   pb <- utils::txtProgressBar(min = 0, max = trials, style = 3)  #Start progress bar
+
+
+  ### Create Positive and Negative Matrices to hold backbone ###
+  Pupper <- matrix(0, nrow(P), ncol(P))
+  Plower <- matrix(0, nrow(P), ncol(P))
+
+
   for (i in 1:trials){
 
     #Use probabilities to create an SDSM Bstar
