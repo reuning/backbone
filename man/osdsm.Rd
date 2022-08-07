@@ -70,9 +70,9 @@ is used to estimate the required number of trials to make such a comparison with
 and when the riskiest p-value being evaluated is at least 5\% smaller than \code{alpha}. When any \code{mtc} correction is applied,
 for simplicity this estimation is based on a conservative Bonferroni correction.
 
-The Monte Carlo simulations can be run in parallel using the \code{\link{future:future}}{future} frame work. In order to make use of
+The Monte Carlo simulations can be run in parallel using the \code{\link[future:future]{future}} frame work. In order to make use of
 of parallelization call \code{future::plan()} with the requisite plan and set \code{parallel=true}. When in parallel the
-\code{\link{progressr:progressor}}{progressr} package is used to report progress. So you must run \verb{library(progressr);handlers(global = TRUE)}
+\code{\link[progressr:progressor]{progressr}} package is used to report progress. So you must run \verb{library(progressr);handlers(global = TRUE)}
 first.
 }
 \examples{
