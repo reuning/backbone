@@ -11,6 +11,7 @@
 #' @param class string: the class of the returned backbone graph, one of c("original", "matrix", "Matrix", "igraph", "edgelist").
 #'     If "original", the backbone graph returned is of the same class as `B`.
 #' @param narrative boolean: TRUE if suggested text & citations should be displayed.
+#' @param usefastglm bolean: TRUE to use \code{\link[fastglm:fastglm]{fasgtlm}} (if available) when estimating probabilities for the SDSM.
 #'
 #' @details
 #' The `osdsm` function compares an edge's observed weight in the projection `B*t(B)` to the distribution of weights
@@ -62,7 +63,7 @@
 #'             class = "igraph", trials = 100)
 #' plot(bb) #...is sparse with clear communities
 
-osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", class = "original", narrative = FALSE){
+osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", class = "original", narrative = FALSE, usefastglm = TRUE){
 
   #### Class Conversion and Argument Checks ####
   convert <- tomatrix(B)
@@ -102,12 +103,20 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   A$colid <- rep(1:ncol(B), each=nrow(B))   #Column index
 
   #Compute conditional probabilities using logistic regression (see Neal, 2017)
-  for (value in 1:max(weights)) {  #For each edge weight > 0
-    dat <- data.frame(y = (A$value>=value)*1, x1 = stats::ave(A$value>=value,A$rowid,FUN=sum), x2 = stats::ave(A$value>=value,A$colid, FUN=sum))
-    X <- model.matrix( ~ x1 + x2, data = dat)
-    Y <- dat[which(A$value>=(value-1)), "y"]
-    fitted <- fastglm::fastglm(X[which(A$value>=(value-1)), ], Y, family = binomial)
-    A <- cbind(A, predict(fitted, newdata = X, type = "response"))
+  if (requireNamespace("fastglm", quietly = TRUE & usefastglm==TRUE )){
+    for (value in 1:max(weights)) {  #For each edge weight > 0
+      dat <- data.frame(y = (A$value>=value)*1, x1 = stats::ave(A$value>=value,A$rowid,FUN=sum), x2 = stats::ave(A$value>=value,A$colid, FUN=sum))
+      X <- model.matrix( ~ x1 + x2, data = dat)
+      Y <- dat[which(A$value>=(value-1)), "y"]
+      fitted <- fastglm::fastglm(X[which(A$value>=(value-1)), ], Y, family = binomial)
+      A <- cbind(A, predict(fitted, newdata = X, type = "response"))
+    }
+  } else {
+    for (value in 1:max(weights)) {  #For each edge weight > 0
+      dat <- data.frame(y = (A$value>=value)*1, x1 = stats::ave(A$value>=value,A$rowid,FUN=sum), x2 = stats::ave(A$value>=value,A$colid, FUN=sum))
+      fitted <- stats::glm(y ~ x1 + x2, data = dat[which(A$value>=(value-1)),], family = "binomial")
+      A <- cbind(A, stats::predict(fitted, newdata = dat, type = "response"))
+    }
   }
 
   #Transform into unconditional probabilities (see Neal, 2017)
@@ -135,25 +144,47 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   P_flat <- as.vector(P)
 
   p <- progressr::progressor(steps = trials)
-  Pout <- future.apply::future_replicate(trials, {
-    #Use probabilities to create an SDSM Bstar
-    A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
-                    FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
-    Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
+  if (requireNamespace("future.apply", quietly = TRUE  )){
+    Pout <- future.apply::future_replicate(trials, {
+      #Use probabilities to create an SDSM Bstar
+      A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
+                      FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
+      Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
 
-    #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
-    Pstar <- as.vector(tcrossprod(Bstar))
-    Pout <- c(Pstar > P_flat, Pstar < P_flat)
+      #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
+      Pstar <- as.vector(tcrossprod(Bstar))
+      Pout <- c(Pstar > P_flat, Pstar < P_flat)
 
-    #Increment progress bar
-    # utils::setTxtProgressBar(pb, i)
-    p()
-    return(Pout)
-  }, future.seed = T,
-  )
-  #end for loop
+      #Increment progress bar
+      # utils::setTxtProgressBar(pb, i)
+      p()
+      return(Pout)
+    }, future.seed = T,
+    )
+    #end for loop
 
-  close(pb) #End progress bar
+  } else {
+    Pout <- replicate(trials, {
+      #Use probabilities to create an SDSM Bstar
+      A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
+                      FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
+      Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
+
+      #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
+      Pstar <- as.vector(tcrossprod(Bstar))
+      Pout <- c(Pstar > P_flat, Pstar < P_flat)
+
+      #Increment progress bar
+      # utils::setTxtProgressBar(pb, i)
+      p()
+      return(Pout)
+    }
+    )
+    #end for loop
+
+  }
+
+
   Pout <- rowSums(Pout)
   Pupper <- matrix(Pout[1:P_n], nrow(P), ncol(P))
   Plower <- matrix(Pout[(P_n+1):(2*P_n)], nrow(P), ncol(P))
