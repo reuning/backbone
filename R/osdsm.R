@@ -11,7 +11,8 @@
 #' @param class string: the class of the returned backbone graph, one of c("original", "matrix", "Matrix", "igraph", "edgelist").
 #'     If "original", the backbone graph returned is of the same class as `B`.
 #' @param narrative boolean: TRUE if suggested text & citations should be displayed.
-#' @param usefastglm bolean: TRUE to use \code{\link[fastglm:fastglm]{fasgtlm}} (if available) when estimating probabilities for the SDSM.
+#' @param usefastglm boolean: TRUE to use \code{\link[fastglm:fastglm]{fasgtlm}} (if available) when estimating probabilities for the SDSM.
+#' @param parallel boolean: If TRUE it runs the monte carlo simulation loop in parallel using \code{\link[future.apply:future_replicate]{future_replicate}} (see details for help).
 #'
 #' @details
 #' The `osdsm` function compares an edge's observed weight in the projection `B*t(B)` to the distribution of weights
@@ -34,6 +35,11 @@
 #'    is used to estimate the required number of trials to make such a comparison with a `alpha` type-I error rate, (1-`alpha`) power,
 #'    and when the riskiest p-value being evaluated is at least 5% smaller than `alpha`. When any `mtc` correction is applied,
 #'    for simplicity this estimation is based on a conservative Bonferroni correction.
+#'
+#' The Monte Carlo simulations can be run in parallel using the \code{\link{future:future}}{future} frame work. In order to make use of
+#'    of parallelization call `future::plan()` with the requisite plan and set `parallel=true`. When in parallel the
+#'    \code{\link{progressr:progressor}}{progressr} package is used to report progress. So you must run `library(progressr);handlers(global = TRUE)`
+#'    first.
 #'
 #' @return
 #' If `alpha` != NULL: Binary or signed backbone graph of class `class`.
@@ -62,8 +68,18 @@
 #' bb <- osdsm(B, alpha = 0.05, narrative = TRUE,  #An oSDSM backbone...
 #'             class = "igraph", trials = 100)
 #' plot(bb) #...is sparse with clear communities
+#'
+#' #Running in parallel with progresr updates
+#' future::plan("multisession")
+#' library(progressr)
+#' handlers(global=TRUE)
+#'
+#' bb <- osdsm(B, alpha = 0.05,  #An oSDSM backbone...
+#'             class = "igraph", trials = 100, parallel=TRUE)
+#'
+#' future::plan("sequential")
 
-osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", class = "original", narrative = FALSE, usefastglm = TRUE){
+osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", class = "original", narrative = FALSE, usefastglm = TRUE, parallel=FALSE){
 
   #### Class Conversion and Argument Checks ####
   convert <- tomatrix(B)
@@ -103,7 +119,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   A$colid <- rep(1:ncol(B), each=nrow(B))   #Column index
 
   #Compute conditional probabilities using logistic regression (see Neal, 2017)
-  if (requireNamespace("fastglm", quietly = TRUE & usefastglm==TRUE )){
+  if (requireNamespace("fastglm", quietly = TRUE) & usefastglm==TRUE ){
     for (value in 1:max(weights)) {  #For each edge weight > 0
       dat <- data.frame(y = (A$value>=value)*1, x1 = stats::ave(A$value>=value,A$rowid,FUN=sum), x2 = stats::ave(A$value>=value,A$colid, FUN=sum))
       X <- model.matrix( ~ x1 + x2, data = dat)
@@ -133,7 +149,6 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
 
   #### Build null models ####
   message(paste0("Constructing empirical edgewise p-values using ", trials, " trials -" ))
-  pb <- utils::txtProgressBar(min = 0, max = trials, style = 3)  #Start progress bar
 
 
   ### Create Positive and Negative Matrices to hold backbone ###
@@ -143,28 +158,38 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   P_n <- nrow(P)*ncol(P)
   P_flat <- as.vector(P)
 
-  p <- progressr::progressor(steps = trials)
-  if (requireNamespace("future.apply", quietly = TRUE  )){
-    Pout <- future.apply::future_replicate(trials, {
-      #Use probabilities to create an SDSM Bstar
-      A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
-                      FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
-      Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
+  if (requireNamespace("future.apply", quietly = TRUE) & parallel == TRUE ){
+    message("Running using 'future.apply' following 'future::plan()' guidance")
+    if(requireNamespace("progressr", quietly = TRUE)){
+      message("Using package 'progressr' to show progress. For progress run: library(progressr);handlers(global = TRUE)")
+      p <- progressr::progressor(steps = trials)
+    } else {
+      message("Package 'progressr' not loaded so no progress will be shown")
+    }
 
-      #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
-      Pstar <- as.vector(tcrossprod(Bstar))
-      Pout <- c(Pstar > P_flat, Pstar < P_flat)
+    with_progress(
+      Pout <- future.apply::future_replicate(trials, {
+        #Use probabilities to create an SDSM Bstar
+        A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
+                        FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
+        Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
 
-      #Increment progress bar
-      # utils::setTxtProgressBar(pb, i)
-      p()
-      return(Pout)
-    }, future.seed = T,
+        #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
+        Pstar <- as.vector(tcrossprod(Bstar))
+        Pout <- c(Pstar > P_flat, Pstar < P_flat)
+
+        #Increment progress bar
+        # utils::setTxtProgressBar(pb, i)
+        if(requireNamespace("progressr", quietly = TRUE)) p()
+        return(Pout)
+      }, future.seed = T, future.chunk.size=trials/future::nbrOfWorkers())
     )
     #end for loop
 
   } else {
-    Pout <- replicate(trials, {
+    pb <- utils::txtProgressBar(min = 0, max = trials, style = 3)  #Start progress bar
+
+    Pout <- sapply(1:trials, function(i) {
       #Use probabilities to create an SDSM Bstar
       A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
                       FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
@@ -175,13 +200,12 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
       Pout <- c(Pstar > P_flat, Pstar < P_flat)
 
       #Increment progress bar
-      # utils::setTxtProgressBar(pb, i)
-      p()
+      utils::setTxtProgressBar(pb, i)
       return(Pout)
-    }
+    }, simplify="array"
     )
     #end for loop
-
+    close(pb) #End progress bar
   }
 
 

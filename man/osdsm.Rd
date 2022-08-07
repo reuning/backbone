@@ -11,7 +11,9 @@ osdsm(
   signed = FALSE,
   mtc = "none",
   class = "original",
-  narrative = FALSE
+  narrative = FALSE,
+  usefastglm = TRUE,
+  parallel = FALSE
 )
 }
 \arguments{
@@ -30,6 +32,10 @@ Any rows and columns of the associated bipartite matrix that contain only zeros 
 If "original", the backbone graph returned is of the same class as \code{B}.}
 
 \item{narrative}{boolean: TRUE if suggested text & citations should be displayed.}
+
+\item{usefastglm}{boolean: TRUE to use \code{\link[fastglm:fastglm]{fasgtlm}} (if available) when estimating probabilities for the SDSM.}
+
+\item{parallel}{boolean: If TRUE it runs the monte carlo simulation loop in parallel using \code{\link[future.apply:future_replicate]{future_replicate}} (see details for help).}
 }
 \value{
 If \code{alpha} != NULL: Binary or signed backbone graph of class \code{class}.
@@ -63,6 +69,11 @@ comparing a proportion (the p-value) to a known proportion (alpha). When \code{t
 is used to estimate the required number of trials to make such a comparison with a \code{alpha} type-I error rate, (1-\code{alpha}) power,
 and when the riskiest p-value being evaluated is at least 5\% smaller than \code{alpha}. When any \code{mtc} correction is applied,
 for simplicity this estimation is based on a conservative Bonferroni correction.
+
+The Monte Carlo simulations can be run in parallel using the \code{\link{future:future}}{future} frame work. In order to make use of
+of parallelization call \code{future::plan()} with the requisite plan and set \code{parallel=true}. When in parallel the
+\code{\link{progressr:progressor}}{progressr} package is used to report progress. So you must run \verb{library(progressr);handlers(global = TRUE)}
+first.
 }
 \examples{
 #A weighted binary bipartite network of 20 agents & 50 artifacts; agents form two communities
@@ -78,6 +89,16 @@ plot(igraph::graph_from_adjacency_matrix(P, mode = "undirected",
 bb <- osdsm(B, alpha = 0.05, narrative = TRUE,  #An oSDSM backbone...
             class = "igraph", trials = 100)
 plot(bb) #...is sparse with clear communities
+
+#Running in parallel with progresr updates
+future::plan("multisession")
+library(progressr)
+handlers(global=TRUE)
+
+bb <- osdsm(B, alpha = 0.05,  #An oSDSM backbone...
+            class = "igraph", trials = 100, parallel=TRUE)
+
+future::plan("sequential")
 }
 \references{
 package: {Neal, Z. P. (2022). backbone: An R Package to Extract Network Backbones. \emph{PLOS ONE, 17}, e0269137. \doi{10.1371/journal.pone.0269137}}
