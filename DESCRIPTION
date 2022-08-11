@@ -22,12 +22,12 @@ Imports:
     methods,
     stats,
     Rcpp,
-    utils
+    utils,
+    future.apply,
+    progressr
 Suggests:
     fastglm,
-    future.apply,
     knitr,
-    progressr,
     rmarkdown,
     testthat (>= 3.0.0)
 LinkingTo: 

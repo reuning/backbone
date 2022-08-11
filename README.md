@@ -1,3 +1,18 @@
+# Description of branch: 
+
+This branch is developed as a parallelized version of the backbone package. Currently only `osdsm()` uses parallelization. To run it parallelized you need to set a [future plan](https://future.futureverse.org/reference/plan.html). The following code shows how to do this:
+
+```
+future::plan("multisession")
+library(progressr)
+handlers(global=TRUE)
+
+bb <- osdsm(B, alpha = 0.05,  #An oSDSM backbone...
+             class = "igraph", trials = 100, parallel=TRUE)
+```
+
+In addition it can make use of [fastglm](https://jaredhuling.org/fastglm/) if installed. If it is installed it defaults to using fastglm, to turn that off set `usefastglm=FALSE`.
+
 # backbone <img src='man/figures/logo.png' align="right" height="139" />
 
 <!-- badges: start -->
