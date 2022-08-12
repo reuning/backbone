@@ -160,43 +160,47 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
 
   if (requireNamespace("future.apply", quietly = TRUE) & parallel == TRUE ){
     message("Running using 'future.apply' following 'future::plan()' guidance")
-    if(requireNamespace("progressr", quietly = TRUE)){
-      message("Using package 'progressr' to show progress. For progress run: library(progressr);handlers(global = TRUE)")
-      p <- progressr::progressor(steps = trials)
-    } else {
-      message("Package 'progressr' not loaded so no progress will be shown")
-    }
+    message("Using package 'progressr' to show progress. For progress run: library(progressr);handlers(global = TRUE)")
+    p <- progressr::progressor(steps = trials)
 
-    with_progress(
+    progressr::with_progress(
       Pout <- future.apply::future_replicate(trials, {
         #Use probabilities to create an SDSM Bstar
-        A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
-                        FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
-        Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
 
+        tmp <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
+                        FUN = function(x) sample(c(1:max(weights),0),
+                                                 size = 1, replace= TRUE, prob = x))
+
+        Bstar <- Matrix(tmp, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
         #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
-        Pstar <- as.vector(tcrossprod(Bstar))
+        Pstar <- as(Matrix::tcrossprod(Bstar), "sparseVector")
         Pout <- c(Pstar > P_flat, Pstar < P_flat)
-
         #Increment progress bar
         # utils::setTxtProgressBar(pb, i)
-        if(requireNamespace("progressr", quietly = TRUE)) p()
-        return(Pout)
-      }, future.seed = T, future.chunk.size=trials/future::nbrOfWorkers())
+        p()
+        return(as(Pout, "sparseMatrix" ))
+      }, future.seed = F, future.packages="Matrix",
+      simplify=F,
+      future.chunk.size=trials/future::nbrOfWorkers())
     )
     #end for loop
-
+    Pout <- do.call(cbind, (Pout))
+    # Pout
   } else {
     pb <- utils::txtProgressBar(min = 0, max = trials, style = 3)  #Start progress bar
 
     Pout <- sapply(1:trials, function(i) {
       #Use probabilities to create an SDSM Bstar
+
       A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
-                      FUN = function(x) sample(c(1:max(weights),0), size = 1, replace= TRUE, prob = x))
+                      FUN = function(x) sample(c(1:max(weights),0),
+                                               size = 1, replace= TRUE, prob = x))
+
       Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
 
       #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
       Pstar <- as.vector(tcrossprod(Bstar))
+
       Pout <- c(Pstar > P_flat, Pstar < P_flat)
 
       #Increment progress bar
@@ -208,8 +212,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
     close(pb) #End progress bar
   }
 
-
-  Pout <- rowSums(Pout)
+  Pout <- Matrix::rowSums(Pout)
   Pupper <- matrix(Pout[1:P_n], nrow(P), ncol(P))
   Plower <- matrix(Pout[(P_n+1):(2*P_n)], nrow(P), ncol(P))
 
