@@ -179,7 +179,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
         # utils::setTxtProgressBar(pb, i)
         p()
         return(as(Pout, "sparseMatrix" ))
-      }, future.seed = F, future.packages="Matrix",
+      }, future.seed = T, future.packages="Matrix",
       simplify=F,
       future.chunk.size=trials/future::nbrOfWorkers())
     )
