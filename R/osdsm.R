@@ -146,7 +146,6 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   A <- A[,c(1:3,(4+max(weights)):ncol(A))]
   colnames(A) <- c("value", "rowid", "colid", paste0("p", c(1:max(weights),0)))
   A$rand <- NA
-  p_mat <- as.matrix(A[,4:(max(weights)+4)])
 
   #### Build null models ####
   message(paste0("Constructing empirical edgewise p-values using ", trials, " trials -" ))
@@ -168,7 +167,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
 
     Pout <- future.apply::future_replicate(trials, {
         #Use probabilities to create an SDSM Bstar
-        tmp <- sample_matrix(p_mat)
+        tmp <- sample_matrix(A[,4:(max(weights)+4)])
         # tmp <- apply(X = p_mat, MARGIN = 1,
         #                 FUN = function(x) sample(c(1:max(weights),0),
         #                                          size = 1, replace= TRUE, prob = x))
@@ -195,9 +194,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
     Pout <- sapply(1:trials, function(i) {
       #Use probabilities to create an SDSM Bstar
 
-      A$rand <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
-                      FUN = function(x) sample(c(1:max(weights),0),
-                                               size = 1, replace= TRUE, prob = x))
+      A$rand <- sample_matrix(A[,4:(max(weights)+4)])
 
       Bstar <- matrix(A$rand, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
 
