@@ -161,6 +161,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   ncol_B <- ncol(B)
 
   if (requireNamespace("doRNG", quietly = TRUE) & parallel == TRUE ){
+    loadNamespace("doRNG")
     message("Using package 'progressr' to show progress. For progress run: library(progressr);handlers(global = TRUE)")
     p <- progressr::progressor(steps = trials)
     iters <- rep(trials %/% future::nbrOfWorkers(), future::nbrOfWorkers()-1)
