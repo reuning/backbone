@@ -23,7 +23,9 @@ Imports:
     stats,
     Rcpp,
     utils,
-    future.apply,
+    future,
+    doFuture,
+    doRNG,
     progressr
 Suggests:
     fastglm,
