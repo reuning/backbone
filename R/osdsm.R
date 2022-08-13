@@ -146,6 +146,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   A <- A[,c(1:3,(4+max(weights)):ncol(A))]
   colnames(A) <- c("value", "rowid", "colid", paste0("p", c(1:max(weights),0)))
   A$rand <- NA
+  p_mat <- as.matrix(A[,4:(max(weights)+4)])
 
   #### Build null models ####
   message(paste0("Constructing empirical edgewise p-values using ", trials, " trials -" ))
@@ -157,32 +158,34 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
   # Pout <- rep(0, nrow(P)*ncol(P)*2)
   P_n <- nrow(P)*ncol(P)
   P_flat <- as.vector(P)
+  nrow_B <- nrow(B)
+  ncol_B <- ncol(B)
 
   if (requireNamespace("future.apply", quietly = TRUE) & parallel == TRUE ){
     message("Running using 'future.apply' following 'future::plan()' guidance")
     message("Using package 'progressr' to show progress. For progress run: library(progressr);handlers(global = TRUE)")
     p <- progressr::progressor(steps = trials)
 
-    progressr::with_progress(
-      Pout <- future.apply::future_replicate(trials, {
+    Pout <- future.apply::future_replicate(trials, {
         #Use probabilities to create an SDSM Bstar
+        tmp <- sample_matrix(p_mat)
+        # tmp <- apply(X = p_mat, MARGIN = 1,
+        #                 FUN = function(x) sample(c(1:max(weights),0),
+        #                                          size = 1, replace= TRUE, prob = x))
 
-        tmp <- apply(X = A[,4:(max(weights)+4)], MARGIN = 1,
-                        FUN = function(x) sample(c(1:max(weights),0),
-                                                 size = 1, replace= TRUE, prob = x))
-
-        Bstar <- Matrix(tmp, nrow=nrow(B), ncol=ncol(B))  #Convert to matrix
+        Bstar <- Matrix(tmp, nrow=nrow_B, ncol=ncol_B)  #Convert to matrix
         #Construct Pstar from Bstar, check whether Pstar edge is larger/smaller than P edge
         Pstar <- as(Matrix::tcrossprod(Bstar), "sparseVector")
         Pout <- c(Pstar > P_flat, Pstar < P_flat)
         #Increment progress bar
         # utils::setTxtProgressBar(pb, i)
         p()
+        rm(tmp, Bstar, Pstar)
         return(as(Pout, "sparseMatrix" ))
-      }, future.seed = T, future.packages="Matrix",
+      }, future.seed = T,
       simplify=F,
       future.chunk.size=trials/future::nbrOfWorkers())
-    )
+
     #end for loop
     Pout <- do.call(cbind, (Pout))
     # Pout

@@ -31,7 +31,8 @@ Suggests:
     rmarkdown,
     testthat (>= 3.0.0)
 LinkingTo: 
-    Rcpp
+    Rcpp,
+    RcppArmadillo
 VignetteBuilder: knitr
 URL: https://www.zacharyneal.com/backbone, https://github.com/zpneal/backbone
 BugReports: https://github.com/zpneal/backbone/issues

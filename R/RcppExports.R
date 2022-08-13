@@ -5,3 +5,7 @@ fastball_cpp <- function(inputList, numSwaps) {
     .Call(`_backbone_fastball_cpp`, inputList, numSwaps)
 }
 
+sample_matrix <- function(x) {
+    .Call(`_backbone_sample_matrix`, x)
+}
+
