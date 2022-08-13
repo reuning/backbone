@@ -183,7 +183,7 @@ osdsm <- function(B, alpha = 0.05, trials = NULL, signed = FALSE, mtc = "none", 
         rm(tmp, Bstar, Pstar)
         return(as(Pout, "sparseMatrix" ))
       }, future.seed = T,
-      simplify=F,
+      simplify=F, future.packages = "Matrix",
       future.chunk.size=trials/future::nbrOfWorkers())
 
     #end for loop
