@@ -85,3 +85,17 @@ test_that("frommatrix classes match", {
   test <- frommatrix(M,convert="edgelist") #OK
   expect_s3_class(test, "data.frame")
 })
+
+
+
+test_that("sample_matrix", {
+  K <- 5 # number of items
+  Prob <- matrix(runif(1000*K,0,1),1000,K)
+  Prob <- Prob/rowSums(Prob)
+  set.seed(.Random.seed[1])
+  cpp_sample <- sample_matrix(Prob)
+  set.seed(.Random.seed[1])
+  R_sample <- apply(X = Prob, MARGIN = 1,
+                    FUN = function(x) sample(c(1:(K-1),0), size = 1, replace= TRUE, prob = x))
+  expect_equal(cpp_sample, R_sample)
+})
